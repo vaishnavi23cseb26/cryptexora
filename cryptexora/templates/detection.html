@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+{% block title %}IDS Detection{% endblock %}
+
+{% block head %}
+<style>
+  .detect-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+
+  /* ── Input Panel ── */
+  .input-panel {
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 36px;
+    animation: fadeUp 0.45s ease both;
+  }
+
+  .input-panel h2 {
+    font-family: var(--font-head);
+    font-size: 1.2rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .input-panel .sub { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 28px; }
+
+  /* Custom select styling */
+  .form-group select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%236B7280' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 40px;
+    cursor: pointer;
+  }
+
+  /* Analyze button */
+  #analyzeBtn {
+    width: 100%;
+    justify-content: center;
+    padding: 15px;
+    font-size: 1rem;
+    margin-top: 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  #analyzeBtn.loading {
+    opacity: 0.8;
+    pointer-events: none;
+  }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid rgba(255,255,255,0.4);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    display: none;
+  }
+  #analyzeBtn.loading .spinner { display: inline-block; }
+  #analyzeBtn.loading .btn-text { display: none; }
+
+  /* Quick fill presets */
+  .presets {
+    margin-bottom: 20px;
+  }
+  .presets p {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 10px;
+  }
+  .preset-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    padding: 6px 14px;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+  }
+  .chip:hover { border-color: var(--primary); color: var(--primary); background: var(--primary-lt); }
+
+  /* ── Result Panel ── */
+  .result-panel {
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 36px;
+    animation: fadeUp 0.5s 0.1s ease both;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .result-panel h2 {
+    font-family: var(--font-head);
+    font-size: 1.2rem;
+    font-weight: 800;
+    margin-bottom: 6px;
+  }
+  .result-panel .sub { color: var(--text-muted); font-size: 0.88rem; margin-bottom: 28px; }
+
+  /* Waiting state */
+  .result-waiting {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-light);
+  }
+  .result-waiting .wait-icon {
+    font-size: 3.5rem;
+    animation: pulse 2s ease infinite;
+  }
+  .result-waiting p { font-size: 0.95rem; text-align: center; line-height: 1.5; }
+
+  /* Result display */
+  #resultDisplay { display: none; }
+
+  .verdict-banner {
+    border-radius: var(--radius-sm);
+    padding: 28px 24px;
+    text-align: center;
+    margin-bottom: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .verdict-banner::before {
+    content:'';
+    position: absolute;
+    width: 200px; height: 200px;
+    border-radius: 50%;
+    top: -60px; right: -60px;
+    opacity: 0.15;
+  }
+
+  .verdict-banner.normal {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    border: 1.5px solid #6ee7b7;
+  }
+  .verdict-banner.normal::before { background: #10b981; }
+
+  .verdict-banner.attack {
+    background: linear-gradient(135deg, #fee2e2, #fecaca);
+    border: 1.5px solid #fca5a5;
+    animation: pulse 1.5s ease 3;
+  }
+  .verdict-banner.attack::before { background: #ef4444; }
+
+  .verdict-icon { font-size: 3rem; margin-bottom: 10px; display: block; }
+
+  .verdict-text {
+    font-family: var(--font-head);
+    font-size: 1.8rem;
+    font-weight: 800;
+  }
+  .verdict-banner.normal .verdict-text { color: #065f46; }
+  .verdict-banner.attack .verdict-text { color: #991b1b; }
+
+  /* Details list */
+  .result-details {}
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 16px;
+  }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-key { font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+  .detail-val { font-size: 0.9rem; font-weight: 500; text-align: right; }
+
+  /* Threats list */
+  .threats-box {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: var(--radius-sm);
+    padding: 16px;
+    margin-top: 16px;
+  }
+  .threats-box h4 {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #92400e;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .threat-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 0.87rem;
+    color: #78350f;
+    padding: 4px 0;
+  }
+  .threat-item::before { content: '⚠️'; flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="breadcrumb">Home › Security › IDS Detection</div>
+  <h1>IDS Detection Module</h1>
+  <p>Analyze network traffic to identify potential intrusions and threats</p>
+</div>
+
+<div class="detect-layout">
+
+  <!-- ── Left: Input form ── -->
+  <div class="input-panel">
+    <h2>🔍 Analyze Traffic</h2>
+    <p class="sub">Fill in the traffic details and click Analyze to get an instant verdict</p>
+
+    <!-- Quick preset buttons -->
+    <div class="presets">
+      <p>Quick Fill Presets</p>
+      <div class="preset-chips">
+        <div class="chip" onclick="fillPreset('normal')">✅ Normal Traffic</div>
+        <div class="chip" onclick="fillPreset('ddos')">🚨 DDoS Simulation</div>
+        <div class="chip" onclick="fillPreset('probe')">🔎 Port Probe</div>
+        <div class="chip" onclick="fillPreset('suspicious')">⚠️ Suspicious IP</div>
+      </div>
+    </div>
+
+    <!-- Form fields -->
+    <div class="form-group">
+      <label>🌐 IP Address</label>
+      <input type="text" id="ip" placeholder="e.g. 192.168.1.105" value="192.168.1.1" />
+    </div>
+
+    <div class="form-group">
+      <label>📦 Packet Size (bytes)</label>
+      <input type="number" id="packetSize" placeholder="e.g. 1024" value="1024" min="0" max="99999" />
+    </div>
+
+    <div class="form-group">
+      <label>📡 Request Type</label>
+      <select id="requestType">
+        <option value="GET">GET — Retrieve data</option>
+        <option value="POST">POST — Submit data</option>
+        <option value="PUT">PUT — Update resource</option>
+        <option value="DELETE">DELETE — Remove resource</option>
+        <option value="PATCH">PATCH — Partial update</option>
+        <option value="OPTIONS">OPTIONS — Pre-flight check</option>
+        <option value="HEAD">HEAD — Headers only</option>
+        <option value="UNKNOWN">UNKNOWN — Malformed</option>
+      </select>
+    </div>
+
+    <!-- Analyze button -->
+    <button class="btn btn-primary" id="analyzeBtn" onclick="analyzeTraffic()">
+      <div class="spinner"></div>
+      <span class="btn-text">⚡ Analyze Traffic</span>
+    </button>
+  </div>
+
+  <!-- ── Right: Result display ── -->
+  <div class="result-panel">
+    <h2>📊 Analysis Result</h2>
+    <p class="sub">Results will appear here after you analyze traffic</p>
+
+    <!-- Placeholder when no result yet -->
+    <div class="result-waiting" id="resultWaiting">
+      <div class="wait-icon">🛡️</div>
+      <p>No analysis yet.<br/>Fill in the form and click<br/><strong>Analyze Traffic</strong> to begin.</p>
+    </div>
+
+    <!-- Result content (hidden until analysis runs) -->
+    <div id="resultDisplay">
+      <div class="verdict-banner" id="verdictBanner">
+        <span class="verdict-icon" id="verdictIcon"></span>
+        <div class="verdict-text" id="verdictText"></div>
+      </div>
+
+      <div class="result-details">
+        <div class="detail-row">
+          <span class="detail-key">IP Address</span>
+          <span class="detail-val" id="resIp">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Packet Size</span>
+          <span class="detail-val" id="resPacket">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Request Type</span>
+          <span class="detail-val" id="resMethod">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Severity</span>
+          <span class="detail-val" id="resSeverity">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-key">Summary</span>
+          <span class="detail-val" id="resSummary">—</span>
+        </div>
+      </div>
+
+      <!-- Threat list (only shown for attacks) -->
+      <div class="threats-box" id="threatsBox" style="display:none;">
+        <h4>Threats Identified</h4>
+        <div id="threatsList"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── Preset data for quick-fill buttons ──
+  const presets = {
+    normal:     { ip: '192.168.1.55',   size: 512,  method: 'GET'    },
+    ddos:       { ip: '45.33.32.156',   size: 9500, method: 'POST'   },
+    probe:      { ip: '10.10.10.1',     size: 0,    method: 'OPTIONS'},
+    suspicious: { ip: '192.168.100.50', size: 3200, method: 'DELETE' },
+  };
+
+  function fillPreset(type) {
+    const p = presets[type];
+    document.getElementById('ip').value          = p.ip;
+    document.getElementById('packetSize').value  = p.size;
+    document.getElementById('requestType').value = p.method;
+    showToast(`Preset "${type}" loaded — click Analyze!`, 'info');
+  }
+
+  // ── Main analysis function ──
+  async function analyzeTraffic() {
+    const ip         = document.getElementById('ip').value.trim();
+    const packetSize = parseInt(document.getElementById('packetSize').value);
+    const reqType    = document.getElementById('requestType').value;
+
+    // Basic validation
+    if (!ip) { showToast('Please enter an IP address', 'error'); return; }
+    if (isNaN(packetSize) || packetSize < 0) { showToast('Please enter a valid packet size', 'error'); return; }
+
+    // Show loading state on button
+    const btn = document.getElementById('analyzeBtn');
+    btn.classList.add('loading');
+
+    try {
+      // Send data to Flask backend
+      const resp = await fetch('/api/analyze', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ ip, packet_size: packetSize, request_type: reqType })
+      });
+
+      const data = await resp.json();
+
+      // Display the result
+      displayResult(data, ip, packetSize, reqType);
+
+    } catch (err) {
+      showToast('Error connecting to server. Is Flask running?', 'error');
+      console.error(err);
+    } finally {
+      btn.classList.remove('loading');
+    }
+  }
+
+  // ── Update the result panel ──
+  function displayResult(data, ip, packetSize, reqType) {
+    // Hide waiting message, show results
+    document.getElementById('resultWaiting').style.display = 'none';
+    document.getElementById('resultDisplay').style.display = 'block';
+
+    const isAttack = data.result === 'ATTACK';
+    const banner   = document.getElementById('verdictBanner');
+
+    // Set verdict banner style
+    banner.className = 'verdict-banner ' + (isAttack ? 'attack' : 'normal');
+    document.getElementById('verdictIcon').textContent = isAttack ? '🚨' : '✅';
+    document.getElementById('verdictText').textContent = isAttack ? 'ATTACK DETECTED' : 'TRAFFIC NORMAL';
+
+    // Fill detail rows
+    document.getElementById('resIp').textContent     = ip;
+    document.getElementById('resPacket').textContent = packetSize + ' bytes';
+    document.getElementById('resMethod').textContent = reqType;
+    document.getElementById('resSummary').textContent= data.message;
+
+    // Severity badge
+    const sev = data.severity;
+    const sevColors = { HIGH: '#fee2e2', MEDIUM: '#fef3c7', LOW: '#d1fae5' };
+    const sevText   = { HIGH: '#991b1b', MEDIUM: '#92400e', LOW: '#065f46' };
+    const sevEl = document.getElementById('resSeverity');
+    sevEl.innerHTML = `<span style="background:${sevColors[sev]};color:${sevText[sev]};padding:3px 12px;border-radius:50px;font-size:0.82rem;font-weight:700;">${sev}</span>`;
+
+    // Threats list
+    const threatsBox  = document.getElementById('threatsBox');
+    const threatsList = document.getElementById('threatsList');
+    if (data.threats && data.threats.length > 0) {
+      threatsBox.style.display = 'block';
+      threatsList.innerHTML = data.threats
+        .map(t => `<div class="threat-item">${t}</div>`)
+        .join('');
+    } else {
+      threatsBox.style.display = 'none';
+    }
+
+    // Toast notification
+    const msg = isAttack ? `⚠️ Attack detected! Severity: ${sev}` : '✅ Traffic is normal and safe';
+    showToast(msg, isAttack ? 'error' : 'success');
+  }
+</script>
+{% endblock %}

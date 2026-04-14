@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}Traffic Logs{% endblock %}
+
+{% block head %}
+<style>
+  .logs-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  /* Filter pills */
+  .filter-pills {
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+
+  .filter-pill {
+    padding: 8px 18px;
+    border-radius: 50px;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1.5px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    transition: all 0.2s ease;
+  }
+  .filter-pill:hover, .filter-pill.active {
+    border-color: var(--primary);
+    background: var(--primary-lt);
+    color: var(--primary);
+  }
+
+  /* Log table panel */
+  .logs-panel {
+    background: var(--surface);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    animation: fadeUp 0.45s ease both;
+  }
+
+  .logs-toolbar {
+    padding: 20px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .logs-toolbar .count {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+  }
+  .logs-toolbar .count strong { color: var(--text); font-weight: 700; }
+
+  /* Search input */
+  .search-wrap {
+    position: relative;
+    display: flex; align-items: center;
+  }
+  .search-wrap input {
+    padding: 9px 14px 9px 36px;
+    border-radius: 50px;
+    border: 1.5px solid var(--border);
+    background: var(--bg2);
+    font-family: var(--font);
+    font-size: 0.88rem;
+    color: var(--text);
+    outline: none;
+    width: 220px;
+    transition: all 0.2s ease;
+  }
+  .search-wrap input:focus { border-color: var(--primary); background: #fff; width: 260px; }
+  .search-wrap .search-icon {
+    position: absolute;
+    left: 12px;
+    font-size: 0.8rem;
+    pointer-events: none;
+  }
+
+  /* No logs state */
+  .empty-state {
+    text-align: center;
+    padding: 70px 20px;
+    color: var(--text-muted);
+  }
+  .empty-state .empty-icon { font-size: 3.5rem; margin-bottom: 16px; display: block; }
+  .empty-state h3 { font-family: var(--font-head); font-size: 1.1rem; margin-bottom: 8px; color: var(--text); }
+  .empty-state p  { font-size: 0.9rem; }
+
+  /* Table tweaks */
+  thead th:first-child { padding-left: 28px; }
+  tbody td:first-child  { padding-left: 28px; }
+
+  .ip-code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    background: var(--bg2);
+    padding: 2px 8px;
+    border-radius: 6px;
+    color: var(--primary);
+  }
+
+  .method-tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+  .method-GET     { background: #dbeafe; color: #1e40af; }
+  .method-POST    { background: #dcfce7; color: #166534; }
+  .method-PUT     { background: #fef3c7; color: #92400e; }
+  .method-DELETE  { background: #fee2e2; color: #991b1b; }
+  .method-PATCH   { background: #ede9fe; color: #5b21b6; }
+  .method-OPTIONS { background: #e0f2fe; color: #0369a1; }
+  .method-HEAD    { background: #f0fdf4; color: #15803d; }
+  .method-UNKNOWN { background: #f3f4f6; color: #374151; }
+
+  .ts { font-size: 0.82rem; color: var(--text-muted); white-space: nowrap; }
+
+  /* Row highlight */
+  tbody tr.row-attack { background: rgba(255,92,92,0.04); }
+  tbody tr.row-normal { background: rgba(67,198,172,0.03); }
+
+  /* Stats mini bar */
+  .mini-stats {
+    display: flex;
+    gap: 20px;
+    padding: 16px 28px;
+    background: var(--bg2);
+    border-top: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .mini-stat { font-size: 0.85rem; color: var(--text-muted); }
+  .mini-stat strong { color: var(--text); font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="breadcrumb">Home › Security › Traffic Logs</div>
+  <h1>Traffic Logs</h1>
+  <p>Complete history of all IDS scan results</p>
+</div>
+
+<!-- Header row with filter + clear button -->
+<div class="logs-header-row">
+  <div class="filter-pills">
+    <div class="filter-pill active" onclick="filterLogs('all', this)">📋 All Logs</div>
+    <div class="filter-pill" onclick="filterLogs('attack', this)">🚨 Attacks Only</div>
+    <div class="filter-pill" onclick="filterLogs('normal', this)">✅ Normal Only</div>
+  </div>
+
+  {% if logs %}
+    <button class="btn btn-danger" onclick="clearLogs()" style="padding:10px 22px; font-size:0.88rem;">
+      🗑️ Clear All Logs
+    </button>
+  {% endif %}
+</div>
+
+<!-- Logs table -->
+<div class="logs-panel">
+
+  {% if logs %}
+    <div class="logs-toolbar">
+      <span class="count">Showing <strong id="visibleCount">{{ logs|length }}</strong> of <strong>{{ logs|length }}</strong> records</span>
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search IP, type…" oninput="searchLogs()" />
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="logsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Timestamp</th>
+            <th>IP Address</th>
+            <th>Packet Size</th>
+            <th>Method</th>
+            <th>Result</th>
+            <th>Severity</th>
+            <th>Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in logs %}
+          <tr class="row-{{ log.result|lower }}" data-result="{{ log.result|lower }}" data-ip="{{ log.ip }}" data-method="{{ log.request_type }}">
+            <td><span style="color:var(--text-light);font-size:0.82rem;">{{ log.id }}</span></td>
+            <td><span class="ts">{{ log.timestamp }}</span></td>
+            <td><span class="ip-code">{{ log.ip }}</span></td>
+            <td>{{ log.packet_size }} <span style="color:var(--text-light);font-size:0.8rem;">bytes</span></td>
+            <td><span class="method-tag method-{{ log.request_type }}">{{ log.request_type }}</span></td>
+            <td>
+              {% if log.result == 'ATTACK' %}
+                <span class="badge badge-attack">🚨 ATTACK</span>
+              {% else %}
+                <span class="badge badge-normal">✅ NORMAL</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if log.severity == 'HIGH' %}
+                <span class="badge badge-high">HIGH</span>
+              {% elif log.severity == 'MEDIUM' %}
+                <span class="badge badge-medium">MEDIUM</span>
+              {% else %}
+                <span class="badge badge-low">LOW</span>
+              {% endif %}
+            </td>
+            <td style="max-width:260px; font-size:0.82rem; color:var(--text-muted);">{{ log.message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Summary bar at bottom -->
+    <div class="mini-stats">
+      <div class="mini-stat">Total: <strong>{{ logs|length }}</strong></div>
+      <div class="mini-stat">Attacks: <strong style="color:var(--danger);">{{ logs|selectattr('result','equalto','ATTACK')|list|length }}</strong></div>
+      <div class="mini-stat">Normal: <strong style="color:#10b981;">{{ logs|selectattr('result','equalto','NORMAL')|list|length }}</strong></div>
+      <div class="mini-stat">Latest scan by: <strong>{{ logs[0].user|title if logs else '—' }}</strong></div>
+    </div>
+
+  {% else %}
+    <!-- Empty state when no logs -->
+    <div class="empty-state">
+      <span class="empty-icon">📭</span>
+      <h3>No logs yet</h3>
+      <p>Run your first scan in the <a href="/detection" style="color:var(--primary); font-weight:600;">IDS Detection</a> module and results will appear here.</p>
+    </div>
+  {% endif %}
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── Filter rows by result type ──
+  function filterLogs(type, el) {
+    // Update active pill style
+    document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+
+    const rows = document.querySelectorAll('#logsTable tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const show = (type === 'all') || (row.dataset.result === type);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    updateCount(visible);
+  }
+
+  // ── Search rows by IP or method ──
+  function searchLogs() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const rows = document.querySelectorAll('#logsTable tbody tr');
+    let visible = 0;
+    rows.forEach(row => {
+      const text = (row.dataset.ip + ' ' + row.dataset.method).toLowerCase();
+      const show = text.includes(q);
+      row.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    updateCount(visible);
+  }
+
+  function updateCount(n) {
+    const el = document.getElementById('visibleCount');
+    if (el) el.textContent = n;
+  }
+
+  // ── Clear all logs ──
+  async function clearLogs() {
+    if (!confirm('Are you sure you want to delete ALL logs? This cannot be undone.')) return;
+
+    try {
+      await fetch('/api/clear_logs', { method: 'POST' });
+      showToast('All logs cleared successfully', 'success');
+      setTimeout(() => window.location.reload(), 800);
+    } catch (err) {
+      showToast('Error clearing logs', 'error');
+    }
+  }
+</script>
+{% endblock %}

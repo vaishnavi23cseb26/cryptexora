@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Cryptexora IDS — {% block title %}{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"/>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="mesh-bg"></div>
+
+<!-- Toast container (notifications pop here) -->
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="app-layout">
+
+  <!-- ═══════════════ SIDEBAR ═══════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">🛡️</div>
+      <span>Cryptexora</span>
+    </div>
+
+    <div class="nav-section-title">Main</div>
+    <a href="/dashboard" class="nav-item {% if active=='dashboard' %}active{% endif %}">
+      <div class="nav-icon">📊</div> Dashboard
+    </a>
+    <a href="/welcome" class="nav-item {% if active=='welcome' %}active{% endif %}">
+      <div class="nav-icon">🏠</div> Overview
+    </a>
+
+    <div class="nav-section-title">Security</div>
+    <a href="/detection" class="nav-item {% if active=='detection' %}active{% endif %}">
+      <div class="nav-icon">🔍</div> IDS Detection
+    </a>
+    <a href="/logs" class="nav-item {% if active=='logs' %}active{% endif %}">
+      <div class="nav-icon">📋</div> Traffic Logs
+    </a>
+
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div class="user-avatar">{{ username[0]|upper }}</div>
+        <div class="user-info">
+          <div class="name">{{ username|title }}</div>
+          <div class="role">Security Analyst</div>
+        </div>
+        <a href="/logout" class="logout-btn" title="Logout">⏻</a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
+  <main class="main-content">
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+
+<!-- Shared JS utilities -->
+<script>
+  // Show a toast notification
+  function showToast(message, type = 'info') {
+    const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> ${message}`;
+    document.getElementById('toastContainer').appendChild(toast);
+    setTimeout(() => toast.remove(), 3100);
+  }
+</script>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>
